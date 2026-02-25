@@ -10,6 +10,7 @@
         canvas { cursor: crosshair; touch-action: none; background: #000; border-radius: 8px; }
         .control-panel { background: rgba(30, 41, 59, 0.9); backdrop-filter: blur(12px); z-index: 50; }
         .mini-canvas { width: 100%; aspect-ratio: 1; background: #000; }
+        .log-panel { font-family: 'Fira Code', monospace; line-height: 1.4; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col md:flex-row">
@@ -38,13 +39,20 @@
             </div>
         </div>
 
-        <!-- Mode Toggle -->
         <button id="resetPoints" class="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded text-xs font-bold transition">
             Reset Klik Titik
         </button>
 
+        <!-- Log Perhitungan -->
+        <div class="bg-black/50 p-3 rounded-lg border border-slate-700 log-panel text-[10px]">
+            <h2 class="text-xs font-semibold uppercase tracking-widest text-blue-400 mb-2 border-b border-blue-900/50 pb-1">Log Kalkulasi (Sampel Tengah)</h2>
+            <div id="calcLog" class="text-slate-300 space-y-1">
+                Silakan buat segitiga...
+            </div>
+        </div>
+
         <!-- Komponen RGB -->
-        <div class="space-y-4 pt-4 border-t border-slate-700">
+        <div class="space-y-4 pt-2">
             <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-400 text-center">Komponen Warna (RGB)</h2>
             <div class="grid grid-cols-1 gap-2">
                 <div>
@@ -75,19 +83,18 @@
         const canvas = document.getElementById('vizCanvas');
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('canvas-container');
+        const calcLog = document.getElementById('calcLog');
 
-        // Color Pickers
         const col1Input = document.getElementById('color1');
         const col2Input = document.getElementById('color2');
         const col3Input = document.getElementById('color3');
         const resetBtn = document.getElementById('resetPoints');
 
-        // Mini Canvases
         const canvasR = document.getElementById('canvasR');
         const canvasG = document.getElementById('canvasG');
         const canvasB = document.getElementById('canvasB');
 
-        let points = []; // Menyimpan maksimal 3 titik {x, y}
+        let points = []; 
         
         function hexToRgb(hex) {
             const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -101,8 +108,6 @@
         function resize() {
             canvas.width = container.clientWidth - 40;
             canvas.height = container.clientHeight - 40;
-            
-            // Set mini canvases
             [canvasR, canvasG, canvasB].forEach(c => {
                 c.width = 150;
                 c.height = 150;
@@ -110,14 +115,27 @@
             draw();
         }
 
-        // Fungsi Barycentric Coordinates untuk menentukan apakah pixel di dalam segitiga
-        // dan mendapatkan rasio interpolasi warna
         function getBarycentric(p, a, b, c) {
             const det = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
             const w1 = ((b.y - c.y) * (p.x - c.x) + (c.x - b.x) * (p.y - c.y)) / det;
             const w2 = ((c.y - a.y) * (p.x - c.x) + (a.x - c.x) * (p.y - c.y)) / det;
             const w3 = 1 - w1 - w2;
-            return { w1, w2, w3 };
+            return { w1, w2, w3, det };
+        }
+
+        function updateLog(sampleP, bar, c1, c2, c3, res) {
+            calcLog.innerHTML = `
+                <div class="text-blue-300">Posisi Piksel: (${Math.round(sampleP.x)}, ${Math.round(sampleP.y)})</div>
+                <div class="mt-2 text-yellow-400 font-bold">1. Barycentric Weights:</div>
+                <div>w1 = ${bar.w1.toFixed(3)} (Bobot A)</div>
+                <div>w2 = ${bar.w2.toFixed(3)} (Bobot B)</div>
+                <div>w3 = ${bar.w3.toFixed(3)} (Bobot C)</div>
+                <div class="mt-2 text-green-400 font-bold">2. Interpolasi Warna:</div>
+                <div class="italic text-[9px] opacity-70">R = (w1*A.r) + (w2*B.r) + (w3*C.r)</div>
+                <div>R: (${bar.w1.toFixed(2)}*${c1.r}) + (${bar.w2.toFixed(2)}*${c2.r}) + (${bar.w3.toFixed(2)}*${c3.r}) = <span class="text-white">${Math.round(res.r)}</span></div>
+                <div>G: (${bar.w1.toFixed(2)}*${c1.g}) + (${bar.w2.toFixed(2)}*${c2.g}) + (${bar.w3.toFixed(2)}*${c3.g}) = <span class="text-white">${Math.round(res.g)}</span></div>
+                <div>B: (${bar.w1.toFixed(2)}*${c1.b}) + (${bar.w2.toFixed(2)}*${c2.b}) + (${bar.w3.toFixed(2)}*${c3.b}) = <span class="text-white">${Math.round(res.b)}</span></div>
+            `;
         }
 
         function rasterizeTriangle() {
@@ -126,10 +144,8 @@
             const c1 = hexToRgb(col1Input.value);
             const c2 = hexToRgb(col2Input.value);
             const c3 = hexToRgb(col3Input.value);
-
             const p1 = points[0], p2 = points[1], p3 = points[2];
 
-            // Hitung bounding box agar tidak scan seluruh kanvas
             const minX = Math.floor(Math.min(p1.x, p2.x, p3.x));
             const maxX = Math.ceil(Math.max(p1.x, p2.x, p3.x));
             const minY = Math.floor(Math.min(p1.y, p2.y, p3.y));
@@ -138,14 +154,19 @@
             const imgData = ctx.createImageData(canvas.width, canvas.height);
             const data = imgData.data;
 
-            // Mini canvas data
-            const imgDataR = canvasR.getContext('2d').createImageData(canvasR.width, canvasR.height);
-            const imgDataG = canvasG.getContext('2d').createImageData(canvasG.width, canvasG.height);
-            const imgDataB = canvasB.getContext('2d').createImageData(canvasB.width, canvasB.height);
+            const ctxR = canvasR.getContext('2d');
+            const ctxG = canvasG.getContext('2d');
+            const ctxB = canvasB.getContext('2d');
+            const imgDataR = ctxR.createImageData(canvasR.width, canvasR.height);
+            const imgDataG = ctxG.createImageData(canvasG.width, canvasG.height);
+            const imgDataB = ctxB.createImageData(canvasB.width, canvasB.height);
 
-            // Kita gunakan rasio skala untuk mini kanvas
             const scaleX = canvasR.width / canvas.width;
             const scaleY = canvasR.height / canvas.height;
+
+            // Titik sampel untuk Log (tengah segitiga)
+            const centerP = { x: (p1.x + p2.x + p3.x) / 3, y: (p1.y + p2.y + p3.y) / 3 };
+            let logUpdated = false;
 
             for (let y = minY; y <= maxY; y++) {
                 if (y < 0 || y >= canvas.height) continue;
@@ -160,37 +181,35 @@
                         const b = bar.w1 * c1.b + bar.w2 * c2.b + bar.w3 * c3.b;
 
                         const idx = (y * canvas.width + x) * 4;
-                        data[idx] = r;
-                        data[idx + 1] = g;
-                        data[idx + 2] = b;
-                        data[idx + 3] = 255;
+                        data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
 
-                        // Fill mini canvases (interpolasi posisi sederhana)
+                        // Log update (sekali saja untuk titik terdekat tengah)
+                        if (!logUpdated && Math.abs(x - centerP.x) < 1 && Math.abs(y - centerP.y) < 1) {
+                            updateLog({x, y}, bar, c1, c2, c3, {r, g, b});
+                            logUpdated = true;
+                        }
+
                         const mx = Math.floor(x * scaleX);
                         const my = Math.floor(y * scaleY);
                         if (mx >= 0 && mx < canvasR.width && my >= 0 && my < canvasR.height) {
                             const midx = (my * canvasR.width + mx) * 4;
-                            // Red Channel Canvas
                             imgDataR.data[midx] = r; imgDataR.data[midx+3] = 255;
-                            // Green Channel Canvas
                             imgDataG.data[midx+1] = g; imgDataG.data[midx+3] = 255;
-                            // Blue Channel Canvas
                             imgDataB.data[midx+2] = b; imgDataB.data[midx+3] = 255;
                         }
                     }
                 }
             }
             ctx.putImageData(imgData, 0, 0);
-            canvasR.getContext('2d').putImageData(imgDataR, 0, 0);
-            canvasG.getContext('2d').putImageData(imgDataG, 0, 0);
-            canvasB.getContext('2d').putImageData(imgDataB, 0, 0);
+            ctxR.putImageData(imgDataR, 0, 0);
+            ctxG.putImageData(imgDataG, 0, 0);
+            ctxB.putImageData(imgDataB, 0, 0);
         }
 
         function draw() {
             ctx.fillStyle = "#000";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Bersihkan mini canvases
             [canvasR, canvasG, canvasB].forEach(c => {
                 const mctx = c.getContext('2d');
                 mctx.fillStyle = "#000";
@@ -199,19 +218,21 @@
 
             if (points.length === 3) {
                 rasterizeTriangle();
+            } else {
+                calcLog.innerHTML = "Menunggu 3 titik segitiga...";
             }
 
-            // Gambar titik panduan
             points.forEach((p, i) => {
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
                 ctx.fillStyle = i === 0 ? col1Input.value : (i === 1 ? col2Input.value : col3Input.value);
                 ctx.strokeStyle = "white";
                 ctx.lineWidth = 2;
                 ctx.fill();
                 ctx.stroke();
                 ctx.fillStyle = "white";
-                ctx.fillText(`P${i+1}`, p.x + 10, p.y - 10);
+                ctx.font = "bold 12px sans-serif";
+                ctx.fillText(i === 0 ? "A" : (i === 1 ? "B" : "C"), p.x - 4, p.y + 4);
             });
         }
 
@@ -219,11 +240,7 @@
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
-
-            if (points.length >= 3) {
-                points = []; // Reset jika sudah ada 3
-            }
-            
+            if (points.length >= 3) points = [];
             points.push({ x, y });
             draw();
         });
@@ -239,7 +256,6 @@
 
         window.addEventListener('resize', resize);
         setTimeout(resize, 50);
-
     </script>
 </body>
 </html>
