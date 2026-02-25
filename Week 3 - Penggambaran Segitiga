@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualisasi Perhitungan Rasterisasi Segitiga</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+        canvas { border: 2px solid #e2e8f0; background: #ffffff; cursor: crosshair; touch-action: none; image-rendering: pixelated; }
+        .math-card { font-family: 'Fira Code', 'Courier New', monospace; font-size: 0.8rem; }
+        .step-active { border-left: 4px solid #10b981; background-color: #ecfdf5; }
+    </style>
+</head>
+<body class="p-4">
+    <div class="max-w-7xl mx-auto">
+        <div class="flex flex-col lg:flex-row gap-6">
+            
+            <!-- Sisi Kiri: Canvas & Kontrol -->
+            <div class="flex-1 space-y-4">
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                    <h1 class="text-xl font-bold text-gray-800 mb-2">Interactive Rasterizer</h1>
+                    <div class="relative inline-block w-full">
+                        <canvas id="canvas" width="600" height="600" class="w-full h-auto rounded-lg shadow-inner"></canvas>
+                    </div>
+                    <div class="mt-4 flex justify-between items-center text-sm">
+                        <span class="text-gray-500 italic">* Geser titik P1, P2, atau P3 untuk melihat perubahan kalkulasi.</span>
+                        <button id="resetBtn" class="bg-red-500 text-white px-4 py-2 rounded shadow hover:bg-red-600 transition">Reset Titik</button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                    <h2 class="font-bold text-gray-700 mb-2">Penjelasan Warna:</h2>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="flex items-center gap-2"><div class="w-4 h-4 bg-emerald-400 rounded"></div> Area Segitiga (Hasil Plot)</div>
+                        <div class="flex items-center gap-2"><div class="w-4 h-4 border border-blue-300 border-dashed rounded"></div> Bounding Box (Jangkauan Scan)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sisi Kanan: Detail Kalkulasi -->
+            <div class="w-full lg:w-[450px] space-y-4">
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 overflow-y-auto max-h-[90vh]">
+                    <h2 class="text-lg font-bold text-gray-800 border-b pb-2 mb-4">Langkah Kalkulasi</h2>
+                    
+                    <div id="stepsContainer" class="space-y-6">
+                        <!-- Step 1: Input -->
+                        <div class="p-3 rounded border border-gray-100">
+                            <h3 class="font-bold text-blue-600 text-sm mb-2">1. Koordinat Input</h3>
+                            <div id="coordsDisplay" class="math-card text-gray-600"></div>
+                        </div>
+
+                        <!-- Step 2: Line Equations -->
+                        <div class="p-3 rounded border border-gray-100">
+                            <h3 class="font-bold text-blue-600 text-sm mb-2">2. Persamaan Garis (Raw)</h3>
+                            <p class="text-[10px] text-gray-400 mb-2">Rumus: A=y1-y2, B=x2-x1, C=-0.5*(A(x1+x2)+B(y1+y2))</p>
+                            <div id="linesRawDisplay" class="math-card text-gray-600 space-y-2"></div>
+                        </div>
+
+                        <!-- Step 3: Normalization -->
+                        <div id="normStep" class="p-3 rounded border border-gray-100">
+                            <h3 class="font-bold text-blue-600 text-sm mb-2">3. Normalisasi Tanda</h3>
+                            <div id="normDisplay" class="math-card text-gray-600"></div>
+                        </div>
+
+                        <!-- Step 4: BBOX -->
+                        <div class="p-3 rounded border border-gray-100">
+                            <h3 class="font-bold text-blue-600 text-sm mb-2">4. Bounding Box</h3>
+                            <div id="bboxDisplay" class="math-card text-gray-600 text-xs"></div>
+                        </div>
+                        
+                        <!-- Step 5: Iteration Info -->
+                        <div class="p-3 rounded border border-gray-100 bg-gray-50">
+                            <h3 class="font-bold text-emerald-600 text-sm mb-1">5. Plotting Pixel</h3>
+                            <p class="text-[10px] text-gray-500">Pixel (x,y) di-plot jika:<br>f1(x,y) > 0 DAN f2(x,y) > 0 DAN f3(x,y) > 0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const resetBtn = document.getElementById('resetBtn');
+
+        // State
+        let points = [
+            { x: 200, y: 150 },
+            { x: 450, y: 250 },
+            { x: 300, y: 500 }
+        ];
+        let draggingIdx = null;
+
+        // UI Helpers
+        const display = {
+            coords: document.getElementById('coordsDisplay'),
+            linesRaw: document.getElementById('linesRawDisplay'),
+            norm: document.getElementById('normDisplay'),
+            normStep: document.getElementById('normStep'),
+            bbox: document.getElementById('bboxDisplay')
+        };
+
+        function getMousePos(evt) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: (evt.clientX - rect.left) * (canvas.width / rect.width),
+                y: (evt.clientY - rect.top) * (canvas.height / rect.height)
+            };
+        }
+
+        canvas.onmousedown = (e) => {
+            const pos = getMousePos(e);
+            points.forEach((p, i) => {
+                if (Math.hypot(p.x - pos.x, p.y - pos.y) < 20) draggingIdx = i;
+            });
+        };
+
+        window.onmousemove = (e) => {
+            if (draggingIdx !== null) {
+                const pos = getMousePos(e);
+                points[draggingIdx].x = Math.round(Math.max(0, Math.min(canvas.width, pos.x)));
+                points[draggingIdx].y = Math.round(Math.max(0, Math.min(canvas.height, pos.y)));
+                update();
+            }
+        };
+
+        window.onmouseup = () => draggingIdx = null;
+
+        function update() {
+            // 1. Display Coords
+            display.coords.innerHTML = points.map((p, i) => `P${i+1}: (${p.x}, ${p.y})`).join('<br>');
+
+            // 2. Calculate Raw Lines
+            const lines = [];
+            const pairs = [[0,1], [1,2], [2,0]];
+            let rawLinesHTML = "";
+
+            pairs.forEach(([i, j], idx) => {
+                const p1 = points[i];
+                const p2 = points[j];
+                const A = p1.y - p2.y;
+                const B = p2.x - p1.x;
+                const C = -0.5 * (A * (p1.x + p2.x) + B * (p1.y + p2.y));
+                lines.push({ A, B, C });
+                
+                rawLinesHTML += `L${idx+1} (P${i+1}-P${j+1}):<br>` +
+                    `&nbsp;&nbsp;A=${A}, B=${B}, C=${C.toFixed(1)}<br>`;
+            });
+            display.linesRaw.innerHTML = rawLinesHTML;
+
+            // 3. Normalization Check
+            const sumC = lines[0].C + lines[1].C + lines[2].C;
+            let normText = `Sum C: ${sumC.toFixed(1)}<br>`;
+            let isNormalized = false;
+
+            if (sumC < 0) {
+                isNormalized = true;
+                lines.forEach(l => { l.A *= -1; l.B *= -1; l.C *= -1; });
+                normText += `<span class="text-red-500">Negatif! Kalikan -1</span>`;
+                display.normStep.classList.add('step-active');
+            } else {
+                normText += `<span class="text-emerald-500">Positif. Tidak perlu balik.</span>`;
+                display.normStep.classList.remove('step-active');
+            }
+            display.norm.innerHTML = normText;
+
+            // 4. Bounding Box
+            const minX = Math.floor(Math.min(...points.map(p => p.x)));
+            const maxX = Math.ceil(Math.max(...points.map(p => p.x)));
+            const minY = Math.floor(Math.min(...points.map(p => p.y)));
+            const maxY = Math.ceil(Math.max(...points.map(p => p.y)));
+            display.bbox.innerHTML = `X: ${minX} s/d ${maxX}<br>Y: ${minY} s/d ${maxY}<br>Total Pixel Cek: ${(maxX-minX)*(maxY-minY)}`;
+
+            render(lines, minX, maxX, minY, maxY);
+        }
+
+        function render(lines, minX, maxX, minY, maxY) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw BBOX guide
+            ctx.strokeStyle = '#94a3b8';
+            ctx.setLineDash([4, 4]);
+            ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+            ctx.setLineDash([]);
+
+            // Rasterize
+            const imgData = ctx.createImageData(canvas.width, canvas.height);
+            const data = imgData.data;
+
+            for (let y = minY; y <= maxY; y++) {
+                if (y < 0 || y >= canvas.height) continue;
+                for (let x = minX; x <= maxX; x++) {
+                    if (x < 0 || x >= canvas.width) continue;
+
+                    // Evaluate 3 line functions
+                    const f1 = lines[0].A * x + lines[0].B * y + lines[0].C;
+                    const f2 = lines[1].A * x + lines[1].B * y + lines[1].C;
+                    const f3 = lines[2].A * x + lines[2].B * y + lines[2].C;
+
+                    if (f1 >= 0 && f2 >= 0 && f3 >= 0) {
+                        const i = (y * canvas.width + x) * 4;
+                        data[i] = 16;      // R
+                        data[i+1] = 185;   // G
+                        data[i+2] = 129;   // B
+                        data[i+3] = 180;   // A
+                    }
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+
+            // Draw Outline
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            ctx.lineTo(points[1].x, points[1].y);
+            ctx.lineTo(points[2].x, points[2].y);
+            ctx.closePath();
+            ctx.strokeStyle = '#064e3b';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Draw Handle points
+            points.forEach((p, i) => {
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 10, 0, Math.PI*2);
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                ctx.fillStyle = '#1e293b';
+                ctx.font = 'bold 14px Inter';
+                ctx.fillText(`P${i+1}`, p.x + 15, p.y - 15);
+            });
+        }
+
+        resetBtn.onclick = () => {
+            points = [{x: 200, y: 150}, {x: 450, y: 250}, {x: 300, y: 500}];
+            update();
+        };
+
+        // Init
+        update();
+    </script>
+</body>
+</html>
