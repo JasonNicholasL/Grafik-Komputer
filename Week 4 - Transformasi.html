@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualisator Transformasi 2D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+        canvas { background-color: #ffffff; cursor: crosshair; touch-action: none; }
+        .log-container::-webkit-scrollbar { width: 6px; }
+        .log-container::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+        .math-box { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1.5rem; margin-top: 2rem; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-8 text-center md:text-left">
+            <h1 class="text-4xl font-extrabold text-slate-900 tracking-tight">Transformasi Geometri 2D</h1>
+            <p class="text-slate-600 mt-2">Visualisasi interaktif manipulasi vertex menggunakan Stack Matriks Homogen.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Area Canvas (Kiri) -->
+            <div class="lg:col-span-7 space-y-4">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="relative overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
+                        <canvas id="gridCanvas" class="w-full h-auto"></canvas>
+                    </div>
+                    <div class="mt-4 flex flex-wrap gap-4 text-sm font-medium text-slate-500">
+                        <div class="flex items-center"><span class="w-3 h-3 bg-blue-500 rounded-full mr-2"></span> Objek Asli</div>
+                        <div class="flex items-center"><span class="w-3 h-3 bg-red-500 rounded-full mr-2"></span> Hasil Transformasi</div>
+                        <button id="resetVertices" class="ml-auto px-3 py-1 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 transition">Reset Canvas</button>
+                    </div>
+                </div>
+
+                <!-- Rumus & Referensi -->
+                <div class="math-box shadow-sm">
+                    <h2 class="text-xl font-bold text-slate-800 mb-4 border-b pb-2">Referensi Matriks Homogen</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                        <div>
+                            <p class="font-bold text-blue-600 mb-2">Translasi (T)</p>
+                            <div class="overflow-x-auto text-center py-2">
+                                $$ \begin{bmatrix} 1 & 0 & t_x \\ 0 & 1 & t_y \\ 0 & 0 & 1 \end{bmatrix} $$
+                            </div>
+                        </div>
+                        <div>
+                            <p class="font-bold text-blue-600 mb-2">Rotasi (R)</p>
+                            <div class="overflow-x-auto text-center py-2">
+                                $$ \begin{bmatrix} \cos\theta & -\sin\theta & 0 \\ \sin\theta & \cos\theta & 0 \\ 0 & 0 & 1 \end{bmatrix} $$
+                            </div>
+                        </div>
+                        <div>
+                            <p class="font-bold text-blue-600 mb-2">Skala (S)</p>
+                            <div class="overflow-x-auto text-center py-2">
+                                $$ \begin{bmatrix} s_x & 0 & 0 \\ 0 & s_y & 0 \\ 0 & 0 & 1 \end{bmatrix} $$
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-6 p-4 bg-slate-50 rounded-lg text-sm text-slate-700">
+                        <p><strong>Aturan Perkalian Matriks:</strong> Matriks komposit dihitung dari kanan ke kiri. Jika urutan operasi yang Anda inginkan adalah 1, lalu 2, lalu 3, maka notasinya adalah:</p>
+                        <div class="text-center my-3 font-mono bg-white p-2 rounded border border-slate-200">
+                            P' = (M₃ · M₂ · M₁) · P
+                        </div>
+                        <p>Di mana <strong>M₁</strong> adalah transformasi yang pertama kali diterapkan pada objek asli.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kontrol & Log (Kanan) -->
+            <div class="lg:col-span-5 flex flex-col gap-6">
+                
+                <!-- Input Transformasi -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                        <span class="bg-blue-100 text-blue-600 p-1 rounded mr-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m0 0h-6"></path></svg>
+                        </span>
+                        Konfigurasi Transformasi
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs font-bold text-slate-500 uppercase">Tipe Operasi</label>
+                            <select id="transType" class="w-full p-2.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none transition">
+                                <option value="translate">Translasi (Tx, Ty)</option>
+                                <option value="rotate">Rotasi (Derajat)</option>
+                                <option value="scale">Skala (Sx, Sy)</option>
+                            </select>
+                        </div>
+
+                        <div id="paramsContainer" class="grid grid-cols-2 gap-3">
+                            <!-- Input dinamis -->
+                        </div>
+
+                        <button id="addTransform" class="w-full bg-slate-900 text-white font-bold py-3 rounded-lg hover:bg-slate-800 transform active:scale-[0.98] transition">
+                            Tambah ke Stack
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Stack View -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col min-h-[300px]">
+                    <h2 class="text-lg font-bold text-slate-800 mb-4">Stack Transformasi (LIFO)</h2>
+                    <div id="stackList" class="space-y-2 overflow-y-auto flex-1 pr-1">
+                        <!-- List item -->
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-slate-100 text-center">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Urutan: Atas (Terakhir) &larr; Bawah (Pertama)</p>
+                    </div>
+                </div>
+
+                <!-- Log Perhitungan -->
+                <div class="bg-slate-900 text-slate-300 p-6 rounded-2xl shadow-xl h-80 flex flex-col">
+                    <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                        <h2 class="text-xs font-mono font-bold uppercase tracking-widest text-emerald-400">Alur Matriks (Kanan ke Kiri)</h2>
+                        <span id="finalMatrixIndicator" class="text-[10px] bg-emerald-900/50 text-emerald-400 px-2 py-0.5 rounded border border-emerald-700/50">LIFO Logic</span>
+                    </div>
+                    <div id="calcLog" class="log-container overflow-y-auto font-mono text-[11px] space-y-3 flex-1">
+                        <!-- Log output -->
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gridCanvas');
+        const ctx = canvas.getContext('2d');
+        const stackList = document.getElementById('stackList');
+        const calcLog = document.getElementById('calcLog');
+        const transType = document.getElementById('transType');
+        const paramsContainer = document.getElementById('paramsContainer');
+        const addBtn = document.getElementById('addTransform');
+
+        let vertices = [
+            {x: 50, y: 50}, {x: 150, y: 50}, {x: 150, y: 150}, {x: 50, y: 150}
+        ];
+        
+        let transformStack = [];
+
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = 450;
+            draw();
+        }
+
+        function updateInputs() {
+            const type = transType.value;
+            let html = '';
+            if (type === 'translate') {
+                html = `
+                    <div class="space-y-1"><label class="text-[10px] font-bold text-slate-400 uppercase">Tx</label><input id="val1" type="number" class="w-full p-2 border rounded-md" value="50"></div>
+                    <div class="space-y-1"><label class="text-[10px] font-bold text-slate-400 uppercase">Ty</label><input id="val2" type="number" class="w-full p-2 border rounded-md" value="50"></div>
+                `;
+            } else if (type === 'rotate') {
+                html = `
+                    <div class="col-span-2 space-y-1"><label class="text-[10px] font-bold text-slate-400 uppercase">Derajat (°)</label><input id="val1" type="number" class="w-full p-2 border rounded-md" value="30"></div>
+                `;
+            } else if (type === 'scale') {
+                html = `
+                    <div class="space-y-1"><label class="text-[10px] font-bold text-slate-400 uppercase">Sx</label><input id="val1" type="number" step="0.1" class="w-full p-2 border rounded-md" value="1.2"></div>
+                    <div class="space-y-1"><label class="text-[10px] font-bold text-slate-400 uppercase">Sy</label><input id="val2" type="number" step="0.1" class="w-full p-2 border rounded-md" value="1.2"></div>
+                `;
+            }
+            paramsContainer.innerHTML = html;
+        }
+
+        transType.onchange = updateInputs;
+        updateInputs();
+
+        addBtn.onclick = () => {
+            const type = transType.value;
+            const v1 = parseFloat(document.getElementById('val1').value) || 0;
+            const v2 = document.getElementById('val2') ? parseFloat(document.getElementById('val2').value) || 0 : 0;
+            transformStack.push({ id: Date.now(), type, val1: v1, val2: v2 });
+            renderStack();
+            draw();
+        };
+
+        function removeStack(id) {
+            transformStack = transformStack.filter(s => s.id !== id);
+            renderStack();
+            draw();
+        }
+
+        function renderStack() {
+            stackList.innerHTML = '';
+            // Visualisasi: Item terbaru di atas, item pertama di bawah
+            [...transformStack].reverse().forEach((item, index) => {
+                const isFirst = (transformStack.length - 1 - transformStack.indexOf(item)) === 0;
+                const div = document.createElement('div');
+                div.className = "flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl group hover:border-blue-400 hover:bg-white transition shadow-sm relative";
+                
+                let label = item.type === 'translate' ? `Translasi (${item.val1}, ${item.val2})` :
+                            item.type === 'rotate' ? `Rotasi (${item.val1}°)` : 
+                            `Skala (${item.val1}, ${item.val2})`;
+                
+                div.innerHTML = `
+                    <div class="flex flex-col">
+                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">M${transformStack.indexOf(item) + 1}</span>
+                        <span class="text-xs font-bold text-slate-700">${label}</span>
+                    </div>
+                    <button onclick="removeStack(${item.id})" class="text-slate-300 hover:text-red-500 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                `;
+                stackList.appendChild(div);
+            });
+        }
+
+        function identity() { return [1, 0, 0, 0, 1, 0, 0, 0, 1]; }
+        
+        function multiply(a, b) {
+            let res = new Array(9).fill(0);
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    for (let k = 0; k < 3; k++) {
+                        res[i * 3 + j] += a[i * 3 + k] * b[k * 3 + j];
+                    }
+                }
+            }
+            return res;
+        }
+
+        function getMatrix(item) {
+            if (item.type === 'translate') return [1, 0, item.val1, 0, 1, item.val2, 0, 0, 1];
+            if (item.type === 'rotate') {
+                const r = item.val1 * Math.PI / 180;
+                const c = Math.cos(r), s = Math.sin(r);
+                return [c, -s, 0, s, c, 0, 0, 0, 1];
+            }
+            if (item.type === 'scale') return [item.val1, 0, 0, 0, item.val2, 0, 0, 0, 1];
+            return identity();
+        }
+
+        function formatMatrixLog(m, label) {
+            return `
+                <div class="bg-slate-800/50 p-2 rounded border border-slate-700 mb-2">
+                    <div class="text-[9px] text-slate-500 mb-1 font-bold">${label}</div>
+                    <div class="grid grid-cols-3 gap-x-2 text-center text-emerald-400">
+                        <span>${m[0].toFixed(2)}</span><span>${m[1].toFixed(2)}</span><span>${m[2].toFixed(2)}</span>
+                        <span>${m[3].toFixed(2)}</span><span>${m[4].toFixed(2)}</span><span>${m[5].toFixed(2)}</span>
+                        <span>${m[6].toFixed(2)}</span><span>${m[7].toFixed(2)}</span><span>${m[8].toFixed(2)}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Grid
+            ctx.strokeStyle = '#f1f5f9';
+            ctx.lineWidth = 1;
+            for(let x=0; x<canvas.width; x+=50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+            for(let y=0; y<canvas.height; y+=50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+
+            // Origin Axis
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.setLineDash([2, 4]);
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(canvas.width, 0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, canvas.height); ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Original
+            ctx.strokeStyle = '#3b82f6';
+            ctx.beginPath();
+            ctx.moveTo(vertices[0].x, vertices[0].y);
+            vertices.forEach(v => ctx.lineTo(v.x, v.y));
+            ctx.closePath();
+            ctx.stroke();
+
+            // Calculation
+            calcLog.innerHTML = '<div class="text-slate-500 italic mb-2">// P\' = (Mₙ · ... · M₁ · M₀) · P</div>';
+            let compositeMatrix = identity();
+            
+            if (transformStack.length > 0) {
+                // Sesuai konvensi aljabar: Matriks pertama (M1) dikalikan paling kanan.
+                // Jika stack = [M1, M2, M3], maka Comp = M3 * M2 * M1
+                // Kita memproses dari index 0 ke n, tapi mengalikan M_new * M_current
+                for (let i = 0; i < transformStack.length; i++) {
+                    const item = transformStack[i];
+                    const m = getMatrix(item);
+                    // Perkalian Kiri: Hasil = MatriksBaru * MatriksLama
+                    compositeMatrix = multiply(m, compositeMatrix);
+                    calcLog.innerHTML += formatMatrixLog(m, `M${i+1}: ${item.type.toUpperCase()}`);
+                }
+            } else {
+                calcLog.innerHTML = '<div class="h-full flex items-center justify-center text-slate-600 italic">Tambahkan operasi untuk menghitung matriks komposit...</div>';
+            }
+
+            const transformedVertices = vertices.map(v => {
+                const x = v.x * compositeMatrix[0] + v.y * compositeMatrix[1] + compositeMatrix[2];
+                const y = v.x * compositeMatrix[3] + v.y * compositeMatrix[4] + compositeMatrix[5];
+                return {x, y};
+            });
+
+            // Transformed Drawing
+            ctx.strokeStyle = '#ef4444';
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.05)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(transformedVertices[0].x, transformedVertices[0].y);
+            transformedVertices.forEach(v => ctx.lineTo(v.x, v.y));
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Log Hasil Akhir
+            if(transformStack.length > 0) {
+                calcLog.innerHTML += `
+                    <div class="mt-4 pt-2 border-t border-slate-700">
+                        <div class="text-emerald-500 font-bold mb-1 uppercase text-[10px]">Matriks Komposit (M_total):</div>
+                        ${formatMatrixLog(compositeMatrix, "HASIL AKHIR")}
+                    </div>
+                `;
+            }
+            calcLog.scrollTop = calcLog.scrollHeight;
+        }
+
+        document.getElementById('resetVertices').onclick = () => {
+            transformStack = [];
+            renderStack();
+            draw();
+        };
+
+        window.addEventListener('resize', resizeCanvas);
+        window.onload = resizeCanvas;
+    </script>
+</body>
+</html>
