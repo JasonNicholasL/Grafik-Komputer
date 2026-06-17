@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalkulator Diffuse 3D - Step-by-Step Tracker</title>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+            height: 95vh;
+        }
+        #sidebar {
+            flex: 1;
+            min-width: 320px;
+            max-width: 360px;
+            background: #1e1e1e;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+        #workspace {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .panel {
+            background: #1e1e1e;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        #canvas-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        canvas {
+            background: #050505;
+            border-radius: 6px;
+            border: 1px solid #444;
+            cursor: move;
+        }
+        #scratchpad-panel {
+            flex: 1.5;
+            overflow-y: auto;
+            background: #fdfdfd;
+            color: #1a1a1a;
+            border-left: 6px solid #e1b12c;
+            padding: 20px;
+        }
+        #scratchpad-panel h3 { color: #111; border-bottom: 2px dashed #ccc; padding-bottom: 5px; margin-bottom: 15px;}
+        h2, h3, h4 { margin-top: 0; color: #fff; }
+        h4 { color: #111; margin-top: 20px; border-bottom: 1px solid #ddd; padding-bottom: 3px; }
+        h5 { color: #444; margin: 10px 0 5px 0; font-size: 14px; }
+        label { display: block; margin-bottom: 4px; font-weight: bold; font-size: 13px; color: #aaa;}
+        .inputs-row { display: flex; gap: 5px; }
+        input[type="number"], input[type="color"] {
+            width: 100%; padding: 6px; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 4px; box-sizing: border-box;
+        }
+        input[type="color"] { height: 35px; padding: 2px; cursor: pointer; }
+        .block-item { background: #252525; padding: 10px; margin-bottom: 10px; border-radius: 4px; border-left: 3px solid #007acc; }
+        .light-item { border-left-color: #e1b12c; }
+        button { background: #007acc; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 5px;}
+        button:hover { background: #005999; }
+        .result-badge { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding: 10px; background: #2a2a2a; border-radius: 4px; }
+        .preview-box { width: 50px; height: 30px; border-radius: 4px; border: 1px solid #fff; }
+        .katex-display { margin: 0.5em 0 !important; overflow-x: auto; text-align: left !important; }
+        .legend { position: absolute; bottom: 10px; left: 20px; display: flex; gap: 15px; font-size: 12px; pointer-events: none;}
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .dots { width: 12px; height: 3px; display: inline-block; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <h2>Konfigurasi</h2>
+    
+    <h3>1. Koordinat Vertex 3D</h3>
+    <div id="vertices-inputs"></div>
+
+    <h3>2. Material Bidang</h3>
+    <div class="form-group">
+        <label>Warna Objek (Albedo):</label>
+        <input type="color" id="matColor" value="#ff0000" oninput="calculate()">
+    </div>
+
+    <h3>3. Sumber Cahaya (Lampu)</h3>
+    <div id="lights-inputs"></div>
+    <button onclick="addLight()">+ Tambah Lampu</button>
+
+    <div class="result-badge">
+        <div>
+            <div style="font-size:12px; color:#aaa;">Hasil Warna Akhir:</div>
+            <strong id="rgb-text">RGB(255, 0, 0)</strong>
+        </div>
+        <div id="colorPreview" class="preview-box"></div>
+    </div>
+</div>
+
+<div id="workspace">
+    <div id="canvas-panel" class="panel">
+        <canvas id="renderCanvas" width="650" height="280"></canvas>
+        <div class="legend">
+            <div class="legend-item"><span class="dots" style="background:#ff4d4d;"></span> Sumbu X</div>
+            <div class="legend-item"><span class="dots" style="background:#2ecc71;"></span> Sumbu Y</div>
+            <div class="legend-item"><span class="dots" style="background:#3498db;"></span> Sumbu Z</div>
+        </div>
+    </div>
+    
+    <div id="scratchpad-panel" class="panel">
+        <h3>📝 Kertas Cakar Kalkulasi (Full Step-by-Step Tracing)</h3>
+        <div id="math-output" style="color: #1a1a1a;">
+            Memuat kalkulasi lengkap...
+        </div>
+    </div>
+</div>
+
+<script>
+let vertices = [
+    {x: -1.0, y: 0.0, z: -1.0},
+    {x:  1.0, y: 0.0, z: -1.0},
+    {x:  0.0, y: 0.0, z:  1.0}
+];
+let lights = [
+    {x: 0.5, y: 1.5, z: 0.5, color: "#ffffff"}
+];
+
+let angleX = -0.4;
+let angleY = 0.5;
+
+function initUI() {
+    const vDiv = document.getElementById('vertices-inputs');
+    vDiv.innerHTML = '';
+    vertices.forEach((v, i) => {
+        vDiv.innerHTML += `
+            <div class="block-item">
+                <label>Vertex V${i+1}</label>
+                <div class="inputs-row">
+                    <input type="number" step="0.1" value="${v.x}" onchange="updateVertex(${i}, 'x', this.value)">
+                    <input type="number" step="0.1" value="${v.y}" onchange="updateVertex(${i}, 'y', this.value)">
+                    <input type="number" step="0.1" value="${v.z}" onchange="updateVertex(${i}, 'z', this.value)">
+                </div>
+            </div>`;
+    });
+    renderLightsUI();
+}
+
+function renderLightsUI() {
+    const lDiv = document.getElementById('lights-inputs');
+    lDiv.innerHTML = '';
+    lights.forEach((l, i) => {
+        lDiv.innerHTML += `
+            <div class="block-item light-item">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+                    <label>Lampu ${i+1}</label>
+                    ${lights.length > 1 ? `<span style="color:#ff4d4d; cursor:pointer; font-size:11px;" onclick="removeLight(${i})">Hapus</span>` : ''}
+                </div>
+                <div class="inputs-row" style="margin-bottom:5px;">
+                    <input type="number" step="0.1" value="${l.x}" onchange="updateLight(${i}, 'x', this.value)">
+                    <input type="number" step="0.1" value="${l.y}" onchange="updateLight(${i}, 'y', this.value)">
+                    <input type="number" step="0.1" value="${l.z}" onchange="updateLight(${i}, 'z', this.value)">
+                </div>
+                <input type="color" value="${l.color}" onchange="updateLight(${i}, 'color', this.value)">
+            </div>`;
+    });
+}
+
+function updateVertex(i, axis, val) { vertices[i][axis] = parseFloat(val) || 0; calculate(); }
+function updateLight(i, axis, val) { lights[i][axis] = axis === 'color' ? val : (parseFloat(val) || 0); calculate(); }
+function addLight() { lights.push({x: -0.5, y: 1.2, z: 0.5, color: "#ffffff"}); renderLightsUI(); calculate(); }
+function removeLight(i) { lights.splice(i, 1); renderLightsUI(); calculate(); }
+
+function hexToRgb(hex) {
+    let r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+    return { r, g, b };
+}
+
+function project(x, y, z, width, height) {
+    let cosY = Math.cos(angleY), sinY = Math.sin(angleY);
+    let x1 = x * cosY - z * sinY;
+    let z1 = x * sinY + z * cosY;
+
+    let cosX = Math.cos(angleX), sinX = Math.sin(angleX);
+    let y2 = y * cosX - z1 * sinX;
+    let z1_rot = y * sinX + z1 * cosX;
+
+    let distance = 4.0;
+    let sz = z1_rot + distance;
+    if (sz < 0.1) sz = 0.1;
+    
+    let fov = 350; 
+    return { x: (x1 * fov) / sz + width / 2, y: -(y2 * fov) / sz + height / 2 };
+}
+
+function drawLine3D(ctx, p1, p2, color, width = 1, isDash = false) {
+    let proj1 = project(p1.x, p1.y, p1.z, ctx.canvas.width, ctx.canvas.height);
+    let proj2 = project(p2.x, p2.y, p2.z, ctx.canvas.width, ctx.canvas.height);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    if(isDash) ctx.setLineDash([4, 4]); else ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(proj1.x, proj1.y); ctx.lineTo(proj2.x, proj2.y); ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+function calculate() {
+    const canvas = document.getElementById('renderCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Render Grid Landasan dan Sumbu Utama
+    for(let i = -2; i <= 2; i += 0.5) {
+        drawLine3D(ctx, {x: i, y: 0, z: -2}, {x: i, y: 0, z: 2}, 'rgba(68, 68, 68, 0.3)', 1);
+        drawLine3D(ctx, {x: -2, y: 0, z: i}, {x: 2, y: 0, z: i}, 'rgba(68, 68, 68, 0.3)', 1);
+    }
+    drawLine3D(ctx, {x: -2.3, y: 0, z: 0}, {x: 2.3, y: 0, z: 0}, '#ff4d4d', 2);
+    drawLine3D(ctx, {x: 0, y: -1.5, z: 0}, {x: 0, y: 1.5, z: 0}, '#2ecc71', 2);
+    drawLine3D(ctx, {x: 0, y: 0, z: -2.3}, {x: 0, y: 0, z: 2.3}, '#3498db', 2);
+
+    // --- MULAI PERHITUNGAN STEP-BY-STEP DETAIL ---
+    let v1 = vertices[0], v2 = vertices[1], v3 = vertices[2];
+    
+    // Step 1: Centroid
+    let cx = (v1.x + v2.x + v3.x) / 3;
+    let cy = (v1.y + v2.y + v3.y) / 3;
+    let cz = (v1.z + v2.z + v3.z) / 3;
+
+    // Step 2: Vektor Sisi
+    let e1 = { x: v2.x - v1.x, y: v2.y - v1.y, z: v2.z - v1.z };
+    let e2 = { x: v3.x - v1.x, y: v3.y - v1.y, z: v3.z - v1.z };
+    
+    // Step 3: Cross Product Manual
+    let nx = e1.y * e2.z - e1.z * e2.y;
+    let ny = e1.z * e2.x - e1.x * e2.z;
+    let nz = e1.x * e2.y - e1.y * e2.x;
+    let nLenRaw = nx*nx + ny*ny + nz*nz;
+    let nLen = Math.sqrt(nLenRaw) || 1;
+    let nNormal = { x: nx/nLen, y: ny/nLen, z: nz/nLen };
+    if(nNormal.y < 0) { nNormal.x *= -1; nNormal.y *= -1; nNormal.z *= -1; nx*=-1; ny*=-1; nz*=-1;}
+
+    // Ambil Data Warna
+    let matHex = document.getElementById('matColor').value;
+    let matRgb = hexToRgb(matHex);
+    let factorR = matRgb.r / 255, factorG = matRgb.g / 255, factorB = matRgb.b / 255;
+
+    let sumR = 0, sumG = 0, sumB = 0;
+
+    // Susun Struktur Konten HTML Penampung ID KaTeX
+    let paperHtml = `<h4>1. Menghitung Titik Berat Bidang (Centroid $C$)</h4>
+    <div id="eq-c1"></div><div id="eq-c2"></div>
+    
+    <h4>2. Menghitung Vektor Sisi Bidang (Edge $\\vec{E}_1$ dan $\\vec{E}_2$)</h4>
+    <div id="eq-e1"></div><div id="eq-e2"></div>
+    
+    <h4>3. Menghitung Vektor Normal Permukaan Tangan Kanan ($\\vec{N}_{raw} = \\vec{E}_1 \\times \\vec{E}_2$)</h4>
+    <div id="eq-n1"></div><div id="eq-n2"></div>
+    <h5>Normalisasi panjang vektor $\\vec{N}_{raw}$ ke Unit Vektor Satuan:</h5>
+    <div id="eq-n3"></div><div id="eq-n4"></div>`;
+
+    paperHtml += `<h4>4. Perhitungan Komponen Sinar Lampu (Diffuse Lambertian)</h4>`;
+
+    lights.forEach((light, idx) => {
+        let lx = light.x - cx; let ly = light.y - cy; let lz = light.z - cz;
+        let lLenRaw = lx*lx + ly*ly + lz*lz;
+        let lLen = Math.sqrt(lLenRaw) || 1;
+        let lDir = { x: lx/lLen, y: ly/lLen, z: lz/lLen };
+
+        let dotVal = nNormal.x * lDir.x + nNormal.y * lDir.y + nNormal.z * lDir.z;
+        let diffuse = Math.max(dotVal, 0);
+        let lRgb = hexToRgb(light.color);
+        
+        let termR = factorR * (lRgb.r / 255) * diffuse;
+        let termG = factorG * (lRgb.g / 255) * diffuse;
+        let termB = factorB * (lRgb.b / 255) * diffuse;
+
+        sumR += termR; sumG += termG; sumB += termB;
+
+        paperHtml += `<h5>● Lampu ${idx+1} [Posisi: (${light.x}, ${light.y}, ${light.z})]:</h5>
+        <div id="eq-l1-${idx}"></div><div id="eq-l2-${idx}"></div>
+        <div id="eq-dot1-${idx}"></div><div id="eq-dot2-${idx}"></div>
+        <div id="eq-rgb-${idx}"></div>`;
+    });
+
+    let finalR = Math.min(Math.round(sumR * 255), 255);
+    let finalG = Math.min(Math.round(sumG * 255), 255);
+    let finalB = Math.min(Math.round(sumB * 255), 255);
+    let finalHex = `rgb(${finalR}, ${finalG}, ${finalB})`;
+
+    document.getElementById('rgb-text').innerText = `RGB(${finalR}, ${finalG}, ${finalB})`;
+    document.getElementById('colorPreview').style.backgroundColor = finalHex;
+
+    paperHtml += `<h4>5. Akumulasi Akhir Warna Hasil Pencahayaan</h4><div id="eq-f1"></div><div id="eq-f2"></div>`;
+    document.getElementById('math-output').innerHTML = paperHtml;
+
+    // --- SUNTIKAN KATEX DETIL TANPA SKIP OLEH ENGINE ---
+    try {
+        if(window.katex) {
+            // Step 1 Render
+            katex.render(`C = \\left( \\frac{${v1.x.toFixed(1)} + ${v2.x.toFixed(1)} + ${v3.x.toFixed(1)}}{3}, \\frac{${v1.y.toFixed(1)} + ${v2.y.toFixed(1)} + ${v3.y.toFixed(1)}}{3}, \\frac{${v1.z.toFixed(1)} + ${v2.z.toFixed(1)} + ${v3.z.toFixed(1)}}{3} \\right)`, document.getElementById('eq-c1'), { displayMode: true });
+            katex.render(`C = \\left( \\frac{${(v1.x+v2.x+v3.x).toFixed(1)}}{3}, \\frac{${(v1.y+v2.y+v3.y).toFixed(1)}}{3}, \\frac{${(v1.z+v2.z+v3.z).toFixed(1)}}{3} \\right) = (${cx.toFixed(3)}, ${cy.toFixed(3)}, ${cz.toFixed(3)})`, document.getElementById('eq-c2'), { displayMode: true });
+
+            // Step 2 Render
+            katex.render(`\\vec{E}_1 = V_2 - V_1 = (${v2.x.toFixed(1)} - ${v1.x.toFixed(1)}, ${v2.y.toFixed(1)} - ${v1.y.toFixed(1)}, ${v2.z.toFixed(1)} - ${v1.z.toFixed(1)}) = (${e1.x.toFixed(2)}, ${e1.y.toFixed(2)}, ${e1.z.toFixed(2)})`, document.getElementById('eq-e1'), { displayMode: true });
+            katex.render(`\\vec{E}_2 = V_3 - V_1 = (${v3.x.toFixed(1)} - ${v1.x.toFixed(1)}, ${v3.y.toFixed(1)} - ${v1.y.toFixed(1)}, ${v3.z.toFixed(1)} - ${v1.z.toFixed(1)}) = (${e2.x.toFixed(2)}, ${e2.y.toFixed(2)}, ${e2.z.toFixed(2)})`, document.getElementById('eq-e2'), { displayMode: true });
+
+            // Step 3 Render
+            katex.render(`\\vec{N}_{raw} = \\begin{pmatrix} (${e1.y.toFixed(2)} \\cdot ${e2.z.toFixed(2)}) - (${e1.z.toFixed(2)} \\cdot ${e2.y.toFixed(2)}) \\\\ (${e1.z.toFixed(2)} \\cdot ${e2.x.toFixed(2)}) - (${e1.x.toFixed(2)} \\cdot ${e2.z.toFixed(2)}) \\\\ (${e1.x.toFixed(2)} \\cdot ${e2.y.toFixed(2)}) - (${e1.y.toFixed(2)} \\cdot ${e2.x.toFixed(2)}) \\end{pmatrix}`, document.getElementById('eq-n1'), { displayMode: true });
+            katex.render(`\\vec{N}_{raw} = (${nx.toFixed(3)}, ${ny.toFixed(3)}, ${nz.toFixed(3)})`, document.getElementById('eq-n2'), { displayMode: true });
+            katex.render(`|\\vec{N}_{raw}| = \\sqrt{(${nx.toFixed(2)})^2 + (${ny.toFixed(2)})^2 + (${nz.toFixed(2)})^2} = \\sqrt{${nLenRaw.toFixed(4)}} = ${nLen.toFixed(4)}`, document.getElementById('eq-n3'), { displayMode: true });
+            katex.render(`\\vec{N} = \\left( \\frac{${nx.toFixed(2)}}{${nLen.toFixed(4)}}, \\frac{${ny.toFixed(2)}}{${nLen.toFixed(4)}}, \\frac{${nz.toFixed(2)}}{${nLen.toFixed(4)}} \\right) = (${nNormal.x.toFixed(3)}, ${nNormal.y.toFixed(3)}, ${nNormal.z.toFixed(3)})`, document.getElementById('eq-n4'), { displayMode: true });
+
+            // Step 4 Render per Lampu
+            lights.forEach((light, idx) => {
+                let lx = light.x - cx; let ly = light.y - cy; let lz = light.z - cz;
+                let lLenRaw = lx*lx + ly*ly + lz*lz; let lLen = Math.sqrt(lLenRaw) || 1;
+                let lDir = { x: lx/lLen, y: ly/lLen, z: lz/lLen };
+                let dotVal = nNormal.x * lDir.x + nNormal.y * lDir.y + nNormal.z * lDir.z;
+                let lRgb = hexToRgb(light.color);
+
+                katex.render(`\\vec{L}_{raw} = L_{pos} - C = (${light.x.toFixed(1)} - ${cx.toFixed(2)}, ${light.y.toFixed(1)} - ${cy.toFixed(2)}, ${light.z.toFixed(1)} - ${cz.toFixed(2)}) = (${lx.toFixed(3)}, ${ly.toFixed(3)}, ${lz.toFixed(3)})`, document.getElementById(`eq-l1-${idx}`), { displayMode: true });
+                katex.render(`\\vec{L}_{${idx+1}} = \\frac{\\vec{L}_{raw}}{\\sqrt{(${lx.toFixed(2)})^2 + (${ly.toFixed(2)})^2 + (${lz.toFixed(2)})^2}} = (${lDir.x.toFixed(3)}, ${lDir.y.toFixed(3)}, ${lDir.z.toFixed(3)})`, document.getElementById(`eq-l2-${idx}`), { displayMode: true });
+                
+                katex.render(`\\vec{N} \\cdot \\vec{L}_{${idx+1}} = (${nNormal.x.toFixed(3)} \\cdot ${lDir.x.toFixed(3)}) + (${nNormal.y.toFixed(3)} \\cdot ${lDir.y.toFixed(3)}) + (${nNormal.z.toFixed(3)} \\cdot ${lDir.z.toFixed(3)})`, document.getElementById(`eq-dot1-${idx}`), { displayMode: true });
+                katex.render(`\\text{Faktor Diffuse}_{${idx+1}} = \\max(${(dotVal).toFixed(4)}, 0) = ${Math.max(dotVal,0).toFixed(4)}`, document.getElementById(`eq-dot2-${idx}`), { displayMode: true });
+                
+                katex.render(`\\text{Sinar}_{${idx+1}} = \\begin{pmatrix} ${factorR.toFixed(2)} \\cdot ${(lRgb.r/255).toFixed(2)} \\\\ ${factorG.toFixed(2)} \\cdot ${(lRgb.g/255).toFixed(2)} \\\\ ${factorB.toFixed(2)} \\cdot ${(lRgb.b/255).toFixed(2)} \\end{pmatrix} \\cdot ${Math.max(dotVal,0).toFixed(3)} = \\begin{pmatrix} ${(factorR*(lRgb.r/255)*Math.max(dotVal,0)).toFixed(3)} \\\\ ${(factorG*(lRgb.g/255)*Math.max(dotVal,0)).toFixed(3)} \\\\ ${(factorB*(lRgb.b/255)*Math.max(dotVal,0)).toFixed(3)} \\end{pmatrix}`, document.getElementById(`eq-rgb-${idx}`), { displayMode: true });
+            });
+
+            // Step 5 Render Gabungan Akhir
+            katex.render(`\\text{Warna}_{Asli} = \\begin{pmatrix} ${sumR.toFixed(4)} \\\\ ${sumG.toFixed(4)} \\\\ ${sumB.toFixed(4)} \\end{pmatrix} \\xrightarrow{\\text{Kalikan 255}} \\begin{pmatrix} ${(sumR*255).toFixed(2)} \\\\ ${(sumG*255).toFixed(2)} \\\\ ${(sumB*255).toFixed(2)} \\end{pmatrix}`, document.getElementById('eq-f1'), { displayMode: true });
+            katex.render(`\\text{Warna Akhir (Clamped)} = \\mathbf{\\text{RGB}(${finalR}, ${finalG}, ${finalB})}`, document.getElementById('eq-f2'), { displayMode: true });
+        }
+    } catch (err) { console.error("Kalkulasi Ditunda Menunggu Dom Siap: ", err); }
+
+    // --- PROSES RENDER GRAFIS 3D POLYGON ---
+    let pV = vertices.map(v => project(v.x, v.y, v.z, canvas.width, canvas.height));
+    let pC = project(cx, cy, cz, canvas.width, canvas.height);
+
+    ctx.fillStyle = finalHex;
+    ctx.beginPath();
+    ctx.moveTo(pV[0].x, pV[0].y); ctx.lineTo(pV[1].x, pV[1].y); ctx.lineTo(pV[2].x, pV[2].y);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    pV.forEach((p, i) => {
+        ctx.fillStyle = "#fff";
+        ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 2*Math.PI); ctx.fill();
+        ctx.fillText(`V${i+1}`, p.x + 8, p.y - 4);
+    });
+
+    let pNormalEnd = project(cx + nNormal.x * 0.6, cy + nNormal.y * 0.6, cz + nNormal.z * 0.6, canvas.width, canvas.height);
+    drawLine3D(ctx, {x: cx, y: cy, z: cz}, {x: cx + nNormal.x * 0.6, y: cy + nNormal.y * 0.6, z: cz + nNormal.z * 0.6}, '#007acc', 2.5);
+    ctx.fillStyle = '#007acc'; ctx.fillText("Normal (N)", pNormalEnd.x + 6, pNormalEnd.y);
+
+    lights.forEach((light, idx) => {
+        let pL = project(light.x, light.y, light.z, canvas.width, canvas.height);
+        drawLine3D(ctx, {x: light.x, y: light.y, z: light.z}, {x: cx, y: cy, z: cz}, 'rgba(241, 196, 15, 0.5)', 1.5, true);
+        ctx.fillStyle = light.color;
+        ctx.beginPath(); ctx.arc(pL.x, pL.y, 7, 0, 2*Math.PI); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.stroke();
+        ctx.fillStyle = '#e1b12c'; ctx.fillText(`L${idx+1}`, pL.x + 10, pL.y - 4);
+    });
+}
+
+// Interaksi Rotasi Kamera Mouse Drag
+let isDragging = false;
+let prevMouse = { x: 0, y: 0 };
+const canvas = document.getElementById('renderCanvas');
+
+canvas.addEventListener('mousedown', () => { isDragging = true; });
+canvas.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+        angleY += (e.offsetX - prevMouse.x) * 0.01;
+        angleX += (e.offsetY - prevMouse.y) * 0.01;
+        calculate();
+    }
+    prevMouse = { x: e.offsetX, y: e.offsetY };
+});
+window.addEventListener('mouseup', () => { isDragging = false; });
+
+window.onload = () => {
+    initUI();
+    setTimeout(calculate, 150);
+};
+</script>
+</body>
+</html>

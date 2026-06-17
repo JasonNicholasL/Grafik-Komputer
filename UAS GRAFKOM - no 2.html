@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalkulator Kamera 3D - Step by Step</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" 
+            onload="renderMathInElement(document.body, { delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}] });"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <style>
+        .matrix-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.3rem;
+            font-family: monospace;
+        }
+        .matrix-cell {
+            background-color: #1e293b;
+            color: #38bdf8;
+            padding: 0.4rem;
+            text-align: center;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+        }
+        /* Kustomisasi scrollbar untuk blok kode/rumus */
+        .custom-scroll::-webkit-scrollbar {
+            height: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4">
+
+    <div class="max-w-7xl mx-auto space-y-6">
+        <header class="border-b border-slate-700 pb-3">
+            <h1 class="text-3xl font-bold text-sky-400">Kalkulator Kamera 3D: Perhitungan <span class="text-amber-400">Step-by-Step</span></h1>
+            <p class="text-slate-400 text-sm mt-1">Sistem breakdown matematika grafika komputer untuk pembentukan ruang kamera perspektif secara utuh.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <div class="bg-slate-800 p-5 rounded-xl shadow-lg border border-slate-700 space-y-4 h-fit text-sm">
+                <h2 class="text-lg font-semibold text-slate-200 border-b border-slate-700 pb-1">Parameter Utama</h2>
+                
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Posisi Kamera (Eye $\vec{E}$)</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <input type="number" id="px" value="0" step="0.5" class="bg-slate-700 p-1.5 rounded border border-slate-600 text-center text-xs">
+                        <input type="number" id="py" value="4" step="0.5" class="bg-slate-700 p-1.5 rounded border border-slate-600 text-center text-xs">
+                        <input type="number" id="pz" value="8" step="0.5" class="bg-slate-700 p-1.5 rounded border border-slate-600 text-center text-xs">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Target Pandang (Target $\vec{T}$)</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <input type="number" id="tx" value="0" step="0.5" class="bg-slate-700 p-1.5 rounded border border-slate-600 text-center text-xs">
+                        <input type="number" id="ty" value="0" step="0.5" class="bg-slate-700 p-1.5 rounded border border-slate-600 text-center text-xs">
+                        <input type="number" id="tz" value="0" step="0.5" class="bg-slate-700 p-1.5 rounded border border-slate-600 text-center text-xs">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1" id="label-up-tilt">Kemiringan Up-Vector (Roll): 0°</label>
+                    <input type="range" id="upTilt" min="-180" max="180" value="0" class="w-full accent-sky-500 cursor-pointer">
+                </div>
+
+                <hr class="border-slate-700">
+
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1" id="label-fov">Field of View (FOV $\theta$): 50°</label>
+                        <input type="range" id="fov" min="15" max="100" value="50" class="w-full accent-sky-500 cursor-pointer">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Aspect Ratio ($a$)</label>
+                        <div class="flex gap-2">
+                            <input type="number" id="aspect" value="1.5" step="0.01" class="w-full bg-slate-700 p-1.5 rounded border border-slate-600 text-center text-xs">
+                            <button onclick="setAspect(1.777)" class="text-xs bg-slate-600 px-2 py-1 rounded hover:bg-slate-500 cursor-pointer">16:9</button>
+                            <button onclick="setAspect(1.0)" class="text-xs bg-slate-600 px-2 py-1 rounded hover:bg-slate-500 cursor-pointer">1:1</button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Near Clip ($n$)</label>
+                            <input type="number" id="near" value="1" step="0.1" min="0.1" class="w-full bg-slate-700 p-1.5 rounded border border-slate-600 text-center text-xs">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Far Clip ($f$)</label>
+                            <input type="number" id="far" value="6" step="0.5" class="w-full bg-slate-700 p-1.5 rounded border border-slate-600 text-center text-xs">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-sky-400 mb-1">Visualisasi Kedudukan Kamera</h2>
+                    <p class="text-xs text-slate-400 mb-2">Seret dengan mouse untuk mengorbit ruang simulasi.</p>
+                </div>
+                <div id="canvas-container" class="w-full h-[300px] bg-slate-950 rounded border border-slate-700 relative overflow-hidden"></div>
+                <div class="text-[11px] text-slate-500 mt-2">
+                    *Garis <span class="text-yellow-400">Kuning</span>: Frustum Volume Kamera. Titik <span class="text-red-400">Merah</span>: Titik Target $\vec{T}$.
+                </div>
+            </div>
+
+            <div class="bg-slate-800 p-5 rounded-xl shadow-lg border border-slate-700 space-y-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-emerald-400">Matriks Akhir (Column-Major)</h2>
+                    <p class="text-xs text-slate-400">Susunan data linear 1D siap pakai di WebGL / OpenGL.</p>
+                </div>
+                
+                <div class="space-y-4">
+                    <div>
+                        <span class="text-xs font-semibold text-slate-300 block mb-1">Matriks View ($M_{view}$)</span>
+                        <div id="matrix-view" class="matrix-grid"></div>
+                    </div>
+                    <div>
+                        <span class="text-xs font-semibold text-slate-300 block mb-1">Matriks Proyeksi ($M_{proj}$)</span>
+                        <div id="matrix-projection" class="matrix-grid"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-6">
+            
+            <div class="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700 space-y-4">
+                <h2 class="text-xl font-bold text-emerald-400 border-b border-slate-700 pb-2">Langkah demi Langkah Pembentukan Matriks View ($M_{view}$)</h2>
+                
+                <div class="space-y-6 text-sm text-slate-300">
+                    <div class="bg-slate-950 p-4 rounded border border-slate-700 custom-scroll overflow-x-auto">
+                        <p class="text-xs font-bold text-sky-400 mb-2">LANGKAH 1: Hitung Vektor Arah Kamera ($\vec{z}$)</p>
+                        <div id="step-z" class="py-2"></div>
+                    </div>
+
+                    <div class="bg-slate-950 p-4 rounded border border-slate-700 custom-scroll overflow-x-auto">
+                        <p class="text-xs font-bold text-sky-400 mb-2">LANGKAH 2: Hitung Vektor Kanan Kamera ($\vec{x}$) Menggunakan Cross Product</p>
+                        <div id="step-x" class="py-2"></div>
+                    </div>
+
+                    <div class="bg-slate-950 p-4 rounded border border-slate-700 custom-scroll overflow-x-auto">
+                        <p class="text-xs font-bold text-sky-400 mb-2">LANGKAH 3: Hitung Vektor Atas Kamera Sebenarnya ($\vec{y}$) Menggunakan Cross Product</p>
+                        <div id="step-y" class="py-2"></div>
+                    </div>
+
+                    <div class="bg-slate-950 p-4 rounded border border-slate-700 custom-scroll overflow-x-auto">
+                        <p class="text-xs font-bold text-sky-400 mb-2">LANGKAH 4: Hitung Komponen Translasi Posisi Kamera Kamera (Dot Product)</p>
+                        <div id="step-trans" class="py-2"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700 space-y-4">
+                <h2 class="text-xl font-bold text-amber-400 border-b border-slate-700 pb-2">Langkah demi Langkah Pembentukan Matriks Proyeksi Perspektif ($M_{proj}$)</h2>
+                
+                <div class="bg-slate-950 p-4 rounded border border-slate-700 custom-scroll overflow-x-auto text-sm text-slate-300 space-y-4">
+                    <div>
+                        <p class="text-xs font-bold text-sky-400 mb-2">LANGKAH 1: Hitung Focal Scale ($f_{scale}$) Berdasarkan FOV $\theta$</p>
+                        <div id="step-fscale" class="py-1"></div>
+                    </div>
+                    <hr class="border-slate-800">
+                    <div>
+                        <p class="text-xs font-bold text-sky-400 mb-2">LANGKAH 2: Hitung Elemen Utama Matriks Proyeksi ($m_{0,0}, m_{1,1}, m_{2,2}, m_{3,2}$)</p>
+                        <div id="step-proj-cells" class="py-1"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- INITIALISASI THREE.JS ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        const worldCamera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+        worldCamera.position.set(11, 7, 11);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(worldCamera, renderer.domElement);
+        controls.enableDamping = true;
+
+        scene.add(new THREE.GridHelper(20, 20, 0x475569, 0x334155));
+        scene.add(new THREE.AxesHelper(3));
+
+        const targetMesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 16), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+        scene.add(targetMesh);
+
+        const virtualCamera = new THREE.PerspectiveCamera(45, 1, 1, 10);
+        const cameraHelper = new THREE.CameraHelper(virtualCamera);
+        scene.add(cameraHelper);
+
+        // --- MANIPULASI DOM ---
+        function setAspect(val) {
+            document.getElementById('aspect').value = val;
+            processStepByStep();
+        }
+
+        // --- FUNGSI UTAMA PERHITUNGAN MENDETAIL ---
+        function processStepByStep() {
+            if (typeof katex === 'undefined') return;
+
+            // Baca seluruh nilai input 
+            const px = parseFloat(document.getElementById('px').value) || 0;
+            const py = parseFloat(document.getElementById('py').value) || 0;
+            const pz = parseFloat(document.getElementById('pz').value) || 0;
+
+            const tx = parseFloat(document.getElementById('tx').value) || 0;
+            const ty = parseFloat(document.getElementById('ty').value) || 0;
+            const tz = parseFloat(document.getElementById('tz').value) || 0;
+
+            const upTiltDeg = parseFloat(document.getElementById('upTilt').value) || 0;
+            document.getElementById('label-up-tilt').innerText = `Kemiringan Up-Vector (Roll): ${upTiltDeg}°`;
+
+            const fovDeg = parseFloat(document.getElementById('fov').value) || 45;
+            document.getElementById('label-fov').innerText = `Field of View (FOV $\\theta$): ${fovDeg}°`;
+
+            const aspect = parseFloat(document.getElementById('aspect').value) || 1.5;
+            const near = parseFloat(document.getElementById('near').value) || 1;
+            const far = parseFloat(document.getElementById('far').value) || 6;
+
+            // --- PERHITUNGAN VEKTOR MATRIKS VIEW ---
+            const radTilt = (upTiltDeg * Math.PI) / 180;
+            const ux = -Math.sin(radTilt), uy = Math.cos(radTilt), uz = 0;
+
+            // Sumbu Z
+            const zRawX = px - tx, zRawY = py - ty, zRawZ = pz - tz;
+            const zLen = Math.hypot(zRawX, zRawY, zRawZ) || 1;
+            const zx = zRawX / zLen, zy = zRawY / zLen, zz = zRawZ / zLen;
+
+            // Sumbu X (Cross product: Up x Z)
+            const xRawX = uy * zz - uz * zy;
+            const xRawY = uz * zx - ux * zz;
+            const xRawZ = ux * zy - uy * zx;
+            const xLen = Math.hypot(xRawX, xRawY, xRawZ) || 1;
+            const xx = xRawX / xLen, xy = xRawY / xLen, xz = xRawZ / xLen;
+
+            // Sumbu Y (Cross product: Z x X)
+            const yx = zy * xz - zz * xy;
+            const yy = zz * xx - zx * xz;
+            const yz = zx * xy - zy * xx;
+
+            // Translasi (Dot Product)
+            const dotX = -(xx * px + xy * py + xz * pz);
+            const dotY = -(yx * px + yy * py + yz * pz);
+            const dotZ = -(zx * px + zy * py + zz * pz);
+
+            const viewMat = [
+                xx, yx, zx, 0,
+                xy, yy, zy, 0,
+                xz, yz, zz, 0,
+                dotX, dotY, dotZ, 1
+            ];
+
+            // --- PERHITUNGAN MATRIKS PROYEKSI ---
+            const fScale = 1.0 / Math.tan((fovDeg * Math.PI) / 360);
+            const rangeInv = 1.0 / (near - far);
+            const m00 = fScale / aspect;
+            const m11 = fScale;
+            const m22 = (far + near) * rangeInv;
+            const m32 = (2 * far * near) * rangeInv;
+
+            const projMat = [
+                m00, 0, 0, 0,
+                0, m11, 0, 0,
+                0, 0, m22, -1,
+                0, 0, m32, 0
+            ];
+
+            // --- TAMPILKAN MATRIKS NUMERIK ---
+            renderGrid('matrix-view', viewMat);
+            renderGrid('matrix-projection', projMat);
+
+            // --- THREE.JS LIVE SYNC ---
+            targetMesh.position.set(tx, ty, tz);
+            virtualCamera.position.set(px, py, pz);
+            virtualCamera.fov = fovDeg;
+            virtualCamera.aspect = aspect;
+            virtualCamera.near = near;
+            virtualCamera.far = far;
+            virtualCamera.up.set(ux, uy, uz);
+            virtualCamera.lookAt(new THREE.Vector3(tx, ty, tz));
+            virtualCamera.updateProjectionMatrix();
+            cameraHelper.update();
+
+            // --- GENERATE TEKS STRINGS UNTUK STEP-BY-STEP (KATEX) ---
+            
+            // Render Langkah Z
+            const latexZ = `
+            \\begin{aligned}
+            \\vec{z}_{raw} &= \\vec{E} - \\vec{T} = [${px} - ${tx},\\; ${py} - ${ty},\\; ${pz} - ${tz}] = [${zRawX.toFixed(2)},\\; ${zRawY.toFixed(2)},\\; ${zRawZ.toFixed(2)}] \\\\
+            \\|\\vec{z}_{raw}\\| &= \\sqrt{(${zRawX.toFixed(2)})^2 + (${zRawY.toFixed(2)})^2 + (${zRawZ.toFixed(2)})^2} = ${zLen.toFixed(4)} \\\\
+            \\vec{z} &= \\frac{\\vec{z}_{raw}}{\\|\\vec{z}_{raw}\\|} = \\left[\\frac{${zRawX.toFixed(2)}}{${zLen.toFixed(2)}},\\; \\frac{${zRawY.toFixed(2)}}{${zLen.toFixed(2)}},\\; \\frac{${zRawZ.toFixed(2)}}{${zLen.toFixed(2)}}\\right] = \\mathbf{[${zx.toFixed(4)},\\; ${zy.toFixed(4)},\\; ${zz.toFixed(4)}]}
+            \\end{aligned}`;
+            katex.render(latexZ, document.getElementById('step-z'), { displayMode: true });
+
+            // Render Langkah X
+            const latexX = `
+            \\begin{aligned}
+            \\vec{U}_{roll} &= [${ux.toFixed(2)},\\; ${uy.toFixed(2)},\\; ${uz.toFixed(2)}] \\quad \\text{(Berdasarkan kemiringan } ${upTiltDeg}^\\circ) \\\\
+            \\vec{x}_{raw} &= \\vec{U}_{roll} \\times \\vec{z} = \\begin{bmatrix} (u_y z_z - u_z z_y) \\\\ (u_z z_x - u_x z_z) \\\\ (u_x z_y - u_y z_x) \\end{bmatrix} = \\begin{bmatrix} (${uy.toFixed(2)} \\cdot ${zz.toFixed(2)} - 0) \\\\ (0 - ${ux.toFixed(2)} \\cdot ${zz.toFixed(2)}) \\\\ (${ux.toFixed(2)} \\cdot ${zy.toFixed(2)} - ${uy.toFixed(2)} \\cdot ${zx.toFixed(2)}) \\end{bmatrix} = [${xRawX.toFixed(2)},\\; ${xRawY.toFixed(2)},\\; ${xRawZ.toFixed(2)}] \\\\
+            \\vec{x} &= \\text{norm}(\\vec{x}_{raw}) = \\mathbf{[${xx.toFixed(4)},\\; ${xy.toFixed(4)},\\; ${xz.toFixed(4)}]}
+            \\end{aligned}`;
+            katex.render(latexX, document.getElementById('step-x'), { displayMode: true });
+
+            // Render Langkah Y
+            const latexY = `
+            \\begin{aligned}
+            \\vec{y} &= \\vec{z} \\times \\vec{x} = \\begin{bmatrix} (z_y x_z - z_z x_y) \\\\ (z_z x_x - z_x x_z) \\\\ (z_x x_y - z_y x_x) \\end{bmatrix} = \\begin{bmatrix} (${zy.toFixed(2)} \\cdot ${xz.toFixed(2)} - ${zz.toFixed(2)} \\cdot ${xy.toFixed(2)}) \\\\ (${zz.toFixed(2)} \\cdot ${xx.toFixed(2)} - ${zx.toFixed(2)} \\cdot ${xz.toFixed(2)}) \\\\ (${zx.toFixed(2)} \\cdot ${xy.toFixed(2)} - ${zy.toFixed(2)} \\cdot ${xx.toFixed(2)}) \\end{bmatrix} = \\mathbf{[${yx.toFixed(4)},\\; ${yy.toFixed(4)},\\; ${yz.toFixed(4)}]}
+            \\end{aligned}`;
+            katex.render(latexY, document.getElementById('step-y'), { displayMode: true });
+
+            // Render Langkah Translasi Dot
+            const latexTrans = `
+            \\begin{aligned}
+            tx &= -(\\vec{x} \\cdot \\vec{E}) = -( (${xx.toFixed(2)} \\cdot ${px}) + (${xy.toFixed(2)} \\cdot ${py}) + (${xz.toFixed(2)} \\cdot ${pz}) ) = \\mathbf{${dotX.toFixed(4)}} \\\\
+            ty &= -(\\vec{y} \\cdot \\vec{E}) = -( (${yx.toFixed(2)} \\cdot ${px}) + (${yy.toFixed(2)} \\cdot ${py}) + (${yz.toFixed(2)} \\cdot ${pz}) ) = \\mathbf{${dotY.toFixed(4)}} \\\\
+            tz &= -(\\vec{z} \\cdot \\vec{E}) = -( (${zx.toFixed(2)} \\cdot ${px}) + (${zy.toFixed(2)} \\cdot ${py}) + (${zz.toFixed(2)} \\cdot ${pz}) ) = \\mathbf{${dotZ.toFixed(4)}}
+            \\end{aligned}`;
+            katex.render(latexTrans, document.getElementById('step-trans'), { displayMode: true });
+
+            // Render Langkah Proyeksi
+            const latexFscale = `
+            \\begin{aligned}
+            f_{scale} &= \\frac{1}{\\tan\\left(\\frac{${fovDeg}^\\circ \\cdot \\pi}{360}\\right)} = \\frac{1}{\\tan(${((fovDeg*Math.PI)/360).toFixed(4)}\\text{ rad})} = \\mathbf{${fScale.toFixed(4)}}
+            \\end{aligned}`;
+            katex.render(latexFscale, document.getElementById('step-fscale'), { displayMode: true });
+
+            const latexProjCells = `
+            \\begin{aligned}
+            m_{0,0} &= \\frac{f_{scale}}{a} = \\frac{${fScale.toFixed(4)}}{${aspect}} = \\mathbf{${m00.toFixed(4)}} \\quad \\quad &m_{1,1} &= f_{scale} = \\mathbf{${fScale.toFixed(4)}} \\\\
+            m_{2,2} &= \\frac{f + n}{n - f} = \\frac{${far} + ${near}}{${near} - ${far}} = \\mathbf{${m22.toFixed(4)}} \\quad \\quad &m_{3,2} &= \\frac{2 \\cdot f \\cdot n}{n - f} = \\frac{2 \\cdot ${far} \\cdot ${near}}{${near} - ${far}} = \\mathbf{${m32.toFixed(4)}}
+            \\end{aligned}`;
+            katex.render(latexProjCells, document.getElementById('step-proj-cells'), { displayMode: true });
+        }
+
+        function renderGrid(id, arr) {
+            const el = document.getElementById(id);
+            el.innerHTML = '';
+            arr.forEach(v => {
+                const cell = document.createElement('div');
+                cell.className = 'matrix-cell';
+                cell.innerText = v.toFixed(4);
+                el.appendChild(cell);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, worldCamera);
+        }
+
+        // Jalankan pelacakan event
+        document.querySelectorAll('input').forEach(i => i.addEventListener('input', processStepByStep));
+        window.addEventListener('resize', () => {
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            worldCamera.aspect = container.clientWidth / container.clientHeight;
+            worldCamera.updateProjectionMatrix();
+        });
+
+        // Start sistem
+        setTimeout(() => { processStepByStep(); animate(); }, 200);
+    </script>
+</body>
+</html>

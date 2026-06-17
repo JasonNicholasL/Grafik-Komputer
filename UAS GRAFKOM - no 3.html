@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ray-Sphere Intersection 3D - Fixed KaTeX Text</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background-color: #f0f4f8; 
+            color: #2c3e50; 
+        }
+        h1 { text-align: center; color: #1a365d; margin-bottom: 5px; font-size: 24px; }
+        p.subtitle { text-align: center; color: #627d98; margin-top: 0; margin-bottom: 25px; }
+        
+        .main-layout { 
+            display: flex; 
+            flex-direction: row; 
+            gap: 20px; 
+            max-width: 1400px; 
+            margin: 0 auto; 
+        }
+        
+        @media (max-width: 1024px) {
+            .main-layout { flex-direction: column; }
+        }
+        
+        .sidebar { 
+            flex: 1; 
+            min-width: 320px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px; 
+        }
+        
+        .content-area { 
+            flex: 2; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px; 
+        }
+        
+        .panel { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+        }
+        
+        h2 { 
+            font-size: 18px; 
+            margin-top: 0; 
+            margin-bottom: 15px; 
+            padding-bottom: 8px; 
+            border-bottom: 2px solid #e2e8f0; 
+            color: #2b6cb0; 
+        }
+        
+        h3 { 
+            font-size: 14px; 
+            margin: 10px 0 5px 0; 
+            color: #4a5568; 
+        }
+        
+        .input-row { 
+            display: flex; 
+            gap: 10px; 
+            margin-bottom: 12px; 
+        }
+        
+        .input-field { 
+            flex: 1; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        
+        .input-field label { 
+            font-size: 11px; 
+            font-weight: 600; 
+            color: #718096; 
+            margin-bottom: 4px; 
+            text-transform: uppercase;
+        }
+        
+        input[type="number"] { 
+            width: 100%; 
+            padding: 8px 10px; 
+            border: 1px solid #cbd5e0; 
+            border-radius: 6px; 
+            font-size: 14px; 
+            background-color: #f7fafc;
+        }
+        
+        #canvas3d-container { 
+            width: 100%; 
+            height: 400px; 
+            background-color: #0f172a; 
+            border-radius: 12px; 
+            position: relative; 
+            overflow: hidden; 
+        }
+        
+        .canvas-label {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            color: #94a3b8;
+            font-size: 12px;
+            pointer-events: none;
+            background: rgba(15, 23, 42, 0.7);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .output-box { 
+            background: #f8fafc; 
+            padding: 15px; 
+            border-left: 4px solid #3182ce; 
+            border-radius: 6px; 
+            font-family: monospace; 
+            font-size: 13px; 
+            white-space: pre-line;
+        }
+        
+        .math-section { font-size: 14px; }
+        .math-step { margin-bottom: 25px; padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #edf2f7; }
+        .math-step-title { font-weight: bold; color: #2d3748; margin-bottom: 10px; font-size: 15px; border-bottom: 1px dashed #cbd5e0; padding-bottom: 5px;}
+    </style>
+</head>
+<body>
+
+    <h1>Ray Tracing 3D: Perpotongan Sinar & Bola</h1>
+    <p class="subtitle">Penghitungan Otomatis & Penjabaran Langkah Demi Langkah Numerik Lengkap</p>
+
+    <div class="main-layout">
+        <div class="sidebar">
+            <div class="panel">
+                <h2>Parameter Input</h2>
+                
+                <h3>Posisi Kamera / Mata ($E$)</h3>
+                <div class="input-row">
+                    <div class="input-field"><label>X</label><input type="number" id="ex" value="0" step="0.5" oninput="updateAll()"></div>
+                    <div class="input-field"><label>Y</label><input type="number" id="ey" value="0" step="0.5" oninput="updateAll()"></div>
+                    <div class="input-field"><label>Z</label><input type="number" id="ez" value="6" step="0.5" oninput="updateAll()"></div>
+                </div>
+
+                <h3>Pusat Bola ($C$) & Radius ($R$)</h3>
+                <div class="input-row">
+                    <div class="input-field"><label>Pusat X</label><input type="number" id="cx" value="1.5" step="0.5" oninput="updateAll()"></div>
+                    <div class="input-field"><label>Pusat Y</label><input type="number" id="cy" value="1.0" step="0.5" oninput="updateAll()"></div>
+                    <div class="input-field"><label>Pusat Z</label><input type="number" id="cz" value="0.0" step="0.5" oninput="updateAll()"></div>
+                </div>
+                <div class="input-row">
+                    <div class="input-field"><label>Radius (R)</label><input type="number" id="r" value="2.0" min="0.1" step="0.1" oninput="updateAll()"></div>
+                </div>
+
+                <h3>Bidang Layar & Piksel Target ($P$)</h3>
+                <div class="input-row">
+                    <div class="input-field"><label>Z Bidang</label><input type="number" id="sz" value="3.0" step="0.5" oninput="updateAll()"></div>
+                    <div class="input-field"><label>Piksel X</label><input type="number" id="px" value="0.5" step="0.1" oninput="updateAll()"></div>
+                    <div class="input-field"><label>Piksel Y</label><input type="number" id="py" value="0.5" step="0.1" oninput="updateAll()"></div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2>Ringkasan Hasil</h2>
+                <div id="output" class="output-box">Menghitung...</div>
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="panel" style="padding: 0; position: relative;">
+                <div class="canvas-label">Visualisasi 3D Interaktif (Gunakan Mouse untuk Navigasi)</div>
+                <div id="canvas3d-container"></div>
+            </div>
+            
+            <div class="panel">
+                <h2>Penjabaran Perhitungan Berurutan (Step-by-Step)</h2>
+                <div class="math-section">
+                    <div class="math-step">
+                        <div class="math-step-title">Langkah 1: Menghitung Vektor Sinar di Ruang Dunia (World Space)</div>
+                        <div id="math-step1"></div>
+                    </div>
+                    <div class="math-step">
+                        <div class="math-step-title">Langkah 2: Transformasi Invers Sinar ke Ruang Lokal Bola Satuan</div>
+                        <div id="math-step2"></div>
+                    </div>
+                    <div class="math-step">
+                        <div class="math-step-title">Langkah 3: Menyusun Koefisien Kuadrat ($at^2 + bt + c = 0$) & Diskriminan</div>
+                        <div id="math-step3"></div>
+                    </div>
+                    <div class="math-step">
+                        <div class="math-step-title">Langkah 4: Penyelesaian Nilai Jarak ($t$) & Transformasi Balik ke Koordinat Dunia</div>
+                        <div id="math-step4"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, controls;
+        let meshMata, meshBola, meshLayar, meshPiksel, lineSinar, meshPotong1, meshPotong2;
+
+        function init3D() {
+            const container = document.getElementById('canvas3d-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f172a);
+
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+            camera.position.set(7, 5, 10);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(10, 15, 10);
+            scene.add(dirLight);
+
+            scene.add(new THREE.GridHelper(20, 20, 0x475569, 0x334155));
+
+            meshMata = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 16), new THREE.MeshStandardMaterial({ color: 0xef4444 }));
+            scene.add(meshMata);
+
+            meshBola = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.5, wireframe: false }));
+            scene.add(meshBola);
+
+            meshLayar = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), new THREE.MeshStandardMaterial({ color: 0xe2e8f0, side: THREE.DoubleSide, transparent: true, opacity: 0.1, wireframe: true }));
+            scene.add(meshLayar);
+
+            meshPiksel = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 16), new THREE.MeshStandardMaterial({ color: 0xeab308 }));
+            scene.add(meshPiksel);
+
+            meshPotong1 = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), new THREE.MeshStandardMaterial({ color: 0x10b981 }));
+            meshPotong2 = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), new THREE.MeshStandardMaterial({ color: 0xa855f7 }));
+            scene.add(meshPotong1); scene.add(meshPotong2);
+
+            lineSinar = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xf43f5e }));
+            scene.add(lineSinar);
+
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function updateAll() {
+            const E = { x: parseFloat(document.getElementById('ex').value)||0, y: parseFloat(document.getElementById('ey').value)||0, z: parseFloat(document.getElementById('ez').value)||0 };
+            const C = { x: parseFloat(document.getElementById('cx').value)||0, y: parseFloat(document.getElementById('cy').value)||0, z: parseFloat(document.getElementById('cz').value)||0 };
+            const R = Math.max(0.01, parseFloat(document.getElementById('r').value)||1);
+            const Sz = parseFloat(document.getElementById('sz').value)||0;
+            const P = { x: parseFloat(document.getElementById('px').value)||0, y: parseFloat(document.getElementById('py').value)||0, z: Sz };
+
+            meshMata.position.set(E.x, E.y, E.z);
+            meshBola.geometry.dispose();
+            meshBola.geometry = new THREE.SphereGeometry(R, 32, 32);
+            meshBola.position.set(C.x, C.y, C.z);
+            meshLayar.position.set(0, 0, Sz);
+            meshPiksel.position.set(P.x, P.y, P.z);
+
+            // --- PERHITUNGAN RAY TRACING (REAL-TIME) ---
+            const Dx_raw = P.x - E.x;
+            const Dy_raw = P.y - E.y;
+            const Dz_raw = P.z - E.z;
+            const kuadrat_len = Dx_raw**2 + Dy_raw**2 + Dz_raw**2;
+            const len_D = Math.sqrt(kuadrat_len);
+            
+            const Dx = Dx_raw / len_D;
+            const Dy = Dy_raw / len_D;
+            const Dz = Dz_raw / len_D;
+
+            // Transformasi Invers: Ruang Dunia -> Ruang Lokal Bola Satuan
+            const Ex_loc = (E.x - C.x) / R;
+            const Ey_loc = (E.y - C.y) / R;
+            const Ez_loc = (E.z - C.z) / R;
+
+            const Dx_loc = Dx / R;
+            const Dy_loc = Dy / R;
+            const Dz_loc = Dz / R;
+
+            // Hitung Koefisien Kuadrat
+            const a = Dx_loc**2 + Dy_loc**2 + Dz_loc**2;
+            const dot_EdotD = (Ex_loc * Dx_loc) + (Ey_loc * Dy_loc) + (Ez_loc * Dz_loc);
+            const b = 2 * dot_EdotD;
+            const len_E_loc_sq = Ex_loc**2 + Ey_loc**2 + Ez_loc**2;
+            const c = len_E_loc_sq - 1;
+
+            const diskriminan = (b**2) - (4 * a * c);
+
+            let txtHasil = "";
+            let t1 = null, t2 = null;
+            let p1 = null, p2 = null;
+            let t_terdekat = null, p_terdekat = null;
+
+            meshPotong1.visible = false; meshPotong2.visible = false;
+
+            if (diskriminan < 0) {
+                txtHasil = "Status: Sinar LEWAT (Meleset dari Bola)\nDiskriminan < 0, tidak ada akar real.";
+            } else {
+                t1 = (-b - Math.sqrt(diskriminan)) / (2 * a);
+                t2 = (-b + Math.sqrt(diskriminan)) / (2 * a);
+
+                p1 = { x: E.x + t1*Dx, y: E.y + t1*Dy, z: E.z + t1*Dz };
+                p2 = { x: E.x + t2*Dx, y: E.y + t2*Dy, z: E.z + t2*Dz };
+
+                if (diskriminan === 0) {
+                    txtHasil = `Status: Sinar MENYINGGUNG Permukaan\nt = ${t1.toFixed(4)}\nKoordinat: [${p1.x.toFixed(3)}, ${p1.y.toFixed(3)}, ${p1.z.toFixed(3)}]`;
+                    if (t1 > 0) { meshPotong1.position.set(p1.x, p1.y, p1.z); meshPotong1.visible = true; t_terdekat = t1; p_terdekat = p1; }
+                } else {
+                    txtHasil = `Status: Sinar MEMOTONG Dua Titik Permukaan\nt1 = ${t1.toFixed(4)} -> P1: [${p1.x.toFixed(2)}, ${p1.y.toFixed(2)}, ${p1.z.toFixed(2)}]\nt2 = ${t2.toFixed(4)} -> P2: [${p2.x.toFixed(2)}, ${p2.y.toFixed(2)}, ${p2.z.toFixed(2)}]\n\n`;
+                    if (t1 > 0) { meshPotong1.position.set(p1.x, p1.y, p1.z); meshPotong1.visible = true; }
+                    if (t2 > 0) { meshPotong2.position.set(p2.x, p2.y, p2.z); meshPotong2.visible = true; }
+
+                    let listT = [];
+                    if (t1 > 0) listT.push({t: t1, p: p1});
+                    if (t2 > 0) listT.push({t: t2, p: p2});
+
+                    if (listT.length > 0) {
+                        listT.sort((m,n) => m.t - n.t);
+                        t_terdekat = listT[0].t; p_terdekat = listT[0].p;
+                        txtHasil += `🟢 PERPOTONGAN TERDEKAT:\nt = ${t_terdekat.toFixed(4)}\nKoordinat: [${p_terdekat.x.toFixed(3)}, ${p_terdekat.y.toFixed(3)}, ${p_terdekat.z.toFixed(3)}]`;
+                    } else { txtHasil += "Kedua perpotongan di belakang mata (t < 0)."; }
+                }
+            }
+            document.getElementById('output').innerText = txtHasil;
+
+            // Menggambar garis lintasan sinar di canvas 3D
+            let panjangSinar = t_terdekat ? t_terdekat + 1.0 : 12;
+            const ptsSinar = [new THREE.Vector3(E.x, E.y, E.z), new THREE.Vector3(E.x + panjangSinar*Dx, E.y + panjangSinar*Dy, E.z + panjangSinar*Dz)];
+            lineSinar.geometry.setFromPoints(ptsSinar);
+
+            // --- JABARAN KATEX STEP-BY-STEP SECARA NUMERIK ---
+            // Langkah 1
+            document.getElementById('math-step1').innerHTML = 
+                `Arah sinar mentah ($D_{raw}$) didapat dari selisih piksel target $P$ dengan koordinat mata $E$ :<br>` +
+                `$$D_{raw} = P - E = ([${P.x} - ${E.x}], [${P.y} - ${E.y}], [${P.z} - ${E.z}]) = (${Dx_raw.toFixed(2)}, ${Dy_raw.toFixed(2)}, ${Dz_raw.toFixed(2)})$$` +
+                `Panjang Magnitudo Sinar $\\lVert D_{raw} \\rVert$:<br>` +
+                `$$\\lVert D_{raw} \\rVert = \\sqrt{(${Dx_raw.toFixed(2)})^2 + (${Dy_raw.toFixed(2)})^2 + (${Dz_raw.toFixed(2)})^2} = \\sqrt{${kuadrat_len.toFixed(3)}} = ${len_D.toFixed(4)}$$` +
+                `Normalisasi Vektor Arah Sinar ($D = D_{raw} / \\lVert D_{raw} \\rVert$):<br>` +
+                `$$D = \\left( \\frac{${Dx_raw.toFixed(2)}}{${len_D.toFixed(4)}}, \\frac{${Dy_raw.toFixed(2)}}{${len_D.toFixed(4)}}, \\frac{${Dz_raw.toFixed(2)}}{${len_D.toFixed(4)}} \\right) = (${Dx.toFixed(4)}, ${Dy.toFixed(4)}, ${Dz.toFixed(4)})$$`;
+
+            // Langkah 2
+            document.getElementById('math-step2').innerHTML = 
+                `Menggunakan transformasi invers untuk memetakan asal sinar ($E$) and arah sinar ($D$) ke ruang lokal unit-sphere. ` +
+                `Operasinya adalah translasi invers mengurangkan pusat bola $C$, lalu membagi hasilnya dengan radius $R = ${R}$:<br>` +
+                `$$E_{local} = \\frac{E - C}{R} = \\left( \\frac{${E.x} - ${C.x}}{${R}}, \\frac{${E.y} - ${C.y}}{${R}}, \\frac{${E.z} - ${C.z}}{${R}} \\right) = (${Ex_loc.toFixed(4)}, ${Ey_loc.toFixed(4)}, ${Ez_loc.toFixed(4)})$$` +
+                `$$D_{local} = \\frac{D}{R} = \\left( \\frac{${Dx.toFixed(4)}}{${R}}, \\frac{${Dy.toFixed(4)}}{${R}}, \\frac{${Dz.toFixed(4)}}{${R}} \\right) = (${Dx_loc.toFixed(4)}, ${Dy_loc.toFixed(4)}, ${Dz_loc.toFixed(4)})$$`;
+
+            // Langkah 3
+            document.getElementById('math-step3').innerHTML = 
+                `Persamaan perpotongan lokal: $\\lVert E_{local} + tD_{local} \\rVert^2 = 1 \\implies at^2 + bt + c = 0$.<br>` +
+                `Ayo hitung koefisien komponen numeriknya:<br>` +
+                `$$a = D_{local} \\cdot D_{local} = (${Dx_loc.toFixed(4)})^2 + (${Dy_loc.toFixed(4)})^2 + (${Dz_loc.toFixed(4)})^2 = ${a.toFixed(5)}$$` +
+                `$$b = 2(E_{local} \\cdot D_{local}) = 2 \\times [(${Ex_loc.toFixed(4)} \\times ${Dx_loc.toFixed(4)}) + (${Ey_loc.toFixed(4)} \\times ${Dy_loc.toFixed(4)}) + (${Ez_loc.toFixed(4)} \\times ${Dz_loc.toFixed(4)})] = 2 \\times (${dot_EdotD.toFixed(5)}) = ${b.toFixed(5)}$$` +
+                `$$c = (E_{local} \\cdot E_{local}) - 1 = [(${Ex_loc.toFixed(4)})^2 + (${Ey_loc.toFixed(4)})^2 + (${Ez_loc.toFixed(4)})^2] - 1 = ${len_E_loc_sq.toFixed(5)} - 1 = ${c.toFixed(5)}$$` +
+                `Menghitung nilai Diskriminan ($D_{isk} = b^2 - 4ac$):<br>` +
+                `$$D_{isk} = (${b.toFixed(5)})^2 - 4 \\times (${a.toFixed(5)}) \\times (${c.toFixed(5)}) = ${parseFloat(b**2).toFixed(5)} - (${parseFloat(4*a*c).toFixed(5)}) = ${diskriminan.toFixed(5)}$$`;
+
+            // Langkah 4
+            if (diskriminan >= 0) {
+                const sqrt_disk = Math.sqrt(diskriminan);
+                document.getElementById('math-step4').innerHTML = 
+                    `Akar-akar persamaan kuadrat lokal:<br>` +
+                    `$$t = \\frac{-b \\pm \\sqrt{D_{isk}}}{2a} = \\frac{-(${b.toFixed(5)}) \\pm ${sqrt_disk.toFixed(5)}}{2 \\times ${a.toFixed(5)}}$$` +
+                    `$$t_1 = \\frac{${(-b - sqrt_disk).toFixed(5)}}{${(2*a).toFixed(5)}} = ${t1.toFixed(4)}, \\quad t_2 = \\frac{${(-b + sqrt_disk).toFixed(5)}}{${(2*a).toFixed(5)}} = ${t2.toFixed(4)}$$` +
+                    `Substitusikan nilai $t$ kembali ke persamaan sinar awal di Ruang Dunia ($P_{world} = E + tD$):<br>` +
+                    `$$P_1 = (${E.x} + [${t1.toFixed(4)} \\times ${Dx.toFixed(4)}], \\, ${E.y} + [${t1.toFixed(4)} \\times ${Dy.toFixed(4)}], \\, ${E.z} + [${t1.toFixed(4)} \\times ${Dz.toFixed(4)}]) = [${p1.x.toFixed(3)}, ${p1.y.toFixed(3)}, ${p1.z.toFixed(3)}]$$` +
+                    `$$P_2 = (${E.x} + [${t2.toFixed(4)} \\times ${Dx.toFixed(4)}], \\, ${E.y} + [${t2.toFixed(4)} \\times ${Dy.toFixed(4)}], \\, ${E.z} + [${t2.toFixed(4)} \\times ${Dz.toFixed(4)}]) = [${p2.x.toFixed(3)}, ${p2.y.toFixed(3)}, ${p2.z.toFixed(3)}]$$` +
+                    (p_terdekat ? `$$\\text{Kesimpulan perpotongan valid terdekat (t > 0) ke mata adalah } \\mathbf{P = [${p_terdekat.x.toFixed(3)}, ${p_terdekat.y.toFixed(3)}, ${p_terdekat.z.toFixed(3)}]} \\text{ pada jarak } t = ${t_terdekat.toFixed(4)}.$$` : `$$\\text{Tidak ada perpotongan di depan mata yang bernilai real positif (t > 0).}$$`);
+            } else {
+                document.getElementById('math-step4').innerHTML = `Karena nilai $D_{iskriminan} < 0$, tidak dapat melakukan ekstraksi akar kuadrat bilangan real. Sinar dipastikan meleset secara total.`;
+            }
+
+            // Memicu auto-render KaTeX setelah memuat String HTML baru
+            if (window.renderMathInElement) {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false}
+                    ]
+                });
+            }
+        }
+
+        window.onload = function() { init3D(); updateAll(); };
+    </script>
+</body>
+</html>
